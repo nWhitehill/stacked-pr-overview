@@ -1,0 +1,6 @@
+
+name: 'Stacked PR Overview'
+description: 'A GitHub Action that appends a summary of the PRs in the stack to the PR description.'
+runs:
+  using: 'node20'
+  main: 'index.js'
