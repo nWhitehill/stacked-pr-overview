@@ -1,7 +1,6 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { PullRequest, PullRequestEvent } from '@octokit/webhooks-definitions/schema'
-import { Octokit } from '@octokit/core'
 
 main().catch(err => core.setFailed((err as Error).message))
 
@@ -20,8 +19,38 @@ async function main(){
         fetchRelatedPRs(client, prPayload, primaryBranch, 'down')
     ])
 
-    
-    
+    let prStack = abovePrs.concat(prPayload.pull_request, belowPrs).filter(pr => pr !== undefined)
+    const prNumbers = new Set(prStack.map(pr => pr.number))
+    prStack = prStack.filter(pr => prNumbers.has(pr.number))
+    try {
+        await Promise.all(prStack.map((_pr, i) => updatePRDescription(client, prStack, i)))
+    } catch (err){
+        core.error(`Failed to update PR description: ${(err as Error).message}`)
+    }
+}
+
+async function updatePRDescription(client: ReturnType<typeof github.getOctokit>, prStack: Array<PullRequest>, prIndex: number){
+    const currentPR = prStack[prIndex]
+    const updatePRDescription = currentPR.body + '\n' + generateStackOverview(prStack, prIndex)
+    return client.rest.pulls.update({
+        owner: github.context.repo.owner,
+        repo: github.context.repo.repo,
+        pull_number: currentPR.number,
+        body: updatePRDescription 
+    })
+}
+
+function generateStackOverview(prStack: Array<PullRequest>, currentIndex: number): String{
+    let descriptionArray = ['### PR Stack Overview', '']
+    prStack.forEach((pr, i) => {
+        const description = `${i+1}. ${pr.html_url}`
+        if (i === currentIndex){
+            descriptionArray.push(`${description} <-- You are here`)
+        } else {
+            descriptionArray.push(description)
+        }
+    })
+    return descriptionArray.join('\n')
 }
 
 async function fetchRelatedPRs(client: ReturnType<typeof github.getOctokit>, prEvent: PullRequestEvent, primaryBranch: string, direction: 'up' | 'down'){
@@ -47,4 +76,3 @@ async function fetchRelatedPRs(client: ReturnType<typeof github.getOctokit>, prE
     }
     return relatedPRs
 }
-
